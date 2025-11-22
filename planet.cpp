@@ -1,199 +1,119 @@
+// planet.cpp
 #include "util.hpp"
-#include "noise_params.cpp"
-#include "noise.cpp"
-#include <algorithm>
 
+// forward declarations of noise functions implemented in noise.cpp
+// (these are C++ functions in the same translation unit when linked)
+void initNoise(uint32_t seed); // initialize permutation
+float perlin(float x, float y, float z);
+float fbm(float x, float y, float z, int octaves, float lacunarity, float gain);
+float ridged_fbm(float x, float y, float z, int octaves, float lacunarity, float gain);
+
+struct NoiseParams {
+    float macroFreq;
+    int   macroOctaves;
+    float macroAmp;
+
+    float microFreq;
+    int   microOctaves;
+    float microAmp;
+
+    float ridgeFreq;
+    int   ridgeOctaves;
+    float ridgeAmp;
+
+    float lacunarity;
+    float gain;
+};
+
+// parameters generator
+NoiseParams generateNoiseParams(uint32_t seed);
+
+// keep state (global for simplicity / matches your original layout)
 extern "C" {
-
     static NoiseParams PARAMS;
-    static int GLOBAL_SEED;
-    static float GLOBAL_SCALE;
-    static float GLOBAL_RADIUS;
+    static uint32_t GLOBAL_SEED = 0;
+    static float GLOBAL_SCALE = 1.0f;   // user amplitude scale
+    static float GLOBAL_RADIUS = 1.0f;  // planet base radius
 
-
+    // Initialize the planet generator with a seed, a scale (height multiplier), and base radius
+    // - seed: deterministic key for generating noise params & permutation
+    // - scale: multiplies final height values
+    // - radius: base radius of planet (mesh radius)
     void init_planet(int seed, float scale, float radius) {
-        GLOBAL_SEED = seed;
+        GLOBAL_SEED = static_cast<uint32_t>(seed);
         GLOBAL_SCALE = scale;
         GLOBAL_RADIUS = radius;
-        PARAMS = generateNoiseParams(seed);
+
+        // initialize permutation table in noise module
+        initNoise(GLOBAL_SEED);
+
+        // derive noise parameters deterministically from seed
+        PARAMS = generateNoiseParams(GLOBAL_SEED);
     }
 
-
+    // compute signed height for direction (x,y,z) where x,y,z are coordinates on unit sphere (or approximated)
+    // returns signed height value (negative -> below sea level)
     float get_height(float x, float y, float z) {
-        Vec3 p = {x, y, z};
+        // normalize input direction to use consistent sampling
+        Vec3 n = normalize(Vec3(x, y, z));
 
+        // 1) Macro continent shape (fBm gives 0..1 roughly; scale by macroAmp)
+        float macro = fbm(n.x * PARAMS.macroFreq,
+                          n.y * PARAMS.macroFreq,
+                          n.z * PARAMS.macroFreq,
+                          PARAMS.macroOctaves,
+                          PARAMS.lacunarity,
+                          PARAMS.gain) * PARAMS.macroAmp;
 
-        float macro = perlin({p.x * PARAMS.macroFreq,
-        p.y * PARAMS.macroFreq,
-        p.z * PARAMS.macroFreq}, GLOBAL_SEED);
+        // 2) Micro details
+        float micro = fbm(n.x * PARAMS.microFreq,
+                          n.y * PARAMS.microFreq,
+                          n.z * PARAMS.microFreq,
+                          PARAMS.microOctaves,
+                          PARAMS.lacunarity,
+                          PARAMS.gain) * PARAMS.microAmp;
 
+        // 3) Ridged mountains (sharp peaks)
+        float ridge = ridged_fbm(n.x * PARAMS.ridgeFreq,
+                                 n.y * PARAMS.ridgeFreq,
+                                 n.z * PARAMS.ridgeFreq,
+                                 PARAMS.ridgeOctaves,
+                                 PARAMS.lacunarity,
+                                 PARAMS.gain) * PARAMS.ridgeAmp;
 
-        float micro = fbm(p, PARAMS.microFreq, PARAMS.octaves, GLOBAL_SEED + 100);
+        // 4) continent mask – only apply mountains where macro indicates land
+        // create smooth mask from macro: values near threshold produce smooth coastline
+        float continentMask = smoothstep(0.35f, 0.65f, macro); // 0..1
 
+        // 5) latitudinal (polar) modifier — simple polar effect to add ice/plateau
+        float lat = std::fabs(n.y); // 0 at equator, 1 at poles
+        float polarBoost = smoothstep(0.6f, 0.95f, lat) * 0.08f; // small added height near poles
 
-        float ridge = ridged(p, PARAMS.ridgeFreq, GLOBAL_SEED + 200);
+        // 6) combine with weights (tweakable)
+        float height = macro * 0.65f      // main shape
+                     + micro * 0.30f     // details
+                     + ridge * continentMask * 0.6f // mountains only on continents
+                     + polarBoost;
 
+        // 7) set sea level baseline (shift)
+        const float seaLevel = 0.45f; // bigger -> more ocean
+        height -= seaLevel;
 
-        float mask = std::clamp((macro - 0.3f) / 0.4f, 0.0f, 1.0f);
+        // 8) apply global scaling (user control)
+        height *= GLOBAL_SCALE;
 
-
-        float height = macro * 0.6f
-        + micro * 0.3f
-        + ridge * mask * 0.2f;
-
-
-        height *= PARAMS.amplitude;
-
-
-        return height;
+        return height; // signed height relative to radius
     }
 
-
+    // compute final displaced 3D position for a sphere vertex (expects input roughly normalized)
+    // writes to outX/outY/outZ
     void get_final_position(float x, float y, float z,
-        float* outX, float* outY, float* outZ) {
-        Vec3 p = normalize({x, y, z});
-        float h = get_height(x, y, z);
-
-
-        float finalR = GLOBAL_RADIUS + h * GLOBAL_SCALE;
-
-
-        *outX = p.x * finalR;
-        *outY = p.y * finalR;
-        *outZ = p.z * finalR;
+                            float* outX, float* outY, float* outZ) {
+        Vec3 n = normalize(Vec3(x,y,z));
+        float h = get_height(n.x, n.y, n.z);
+        float r = GLOBAL_RADIUS + h; // final radius = base radius + height
+        *outX = n.x * r;
+        *outY = n.y * r;
+        *outZ = n.z * r;
     }
-
-
-}
-
-// // planet.cpp - Full Example Combining Previous Explanations
-// // ---------------------------------------------------------
-// // This file demonstrates a typical structure for procedural planet generation
-// // in C++ for compilation with WebAssembly (Emscripten).
-// // It includes:
-// //   - Sphere sampling (lat/lon -> vec3)
-// //   - Noise (Simplex stub, fBm)
-// //   - Height generation
-// //   - Public API for JS
-
-// #include <vector>
-// #include <cmath>
-// #include <algorithm>
-// #include "noise.hpp" // Simplex/Perlin implementation (separate file)
-// #include <emscripten/bind.h>
-
-// //------------------------------------------------------
-// // Vector3 structure
-// //------------------------------------------------------
-// struct Vec3 {
-//     float x, y, z;
-// };
-
-// //------------------------------------------------------
-// // Convert (x, y) pixel to sphere normal vector
-// //------------------------------------------------------
-// Vec3 sampleSphere(int x, int y, int size) {
-//     float u = (float)x / (float)size; // 0~1
-//     float v = (float)y / (float)size; // 0~1
-
-//     float lon = u * 2.0f * M_PI; // longitude
-//     float lat = v * M_PI;        // latitude
-
-//     Vec3 n;
-//     n.x = cosf(lon) * sinf(lat);
-//     n.y = cosf(lat);
-//     n.z = sinf(lon) * sinf(lat);
-//     return n;
-// }
-
-// //------------------------------------------------------
-// // fBm Noise (simple fractal noise)
-// //------------------------------------------------------
-// float fbm(const Vec3& p, int octaves, float scale, float persistence) {
-//     float sum = 0.0f;
-//     float amp = 1.0f;
-//     float freq = 1.0f;
-
-//     for (int i = 0; i < octaves; i++) {
-//         sum += amp * simplexNoise(p.x * freq * scale,
-//                                   p.y * freq * scale,
-//                                   p.z * freq * scale);
-//         freq *= 2.0f;
-//         amp  *= persistence;
-//     }
-//     return sum;
-// }
-
-// //------------------------------------------------------
-// // Ridge Noise (sharp mountains)
-// //------------------------------------------------------
-// float ridge(const Vec3& p, float scale) {
-//     float n = simplexNoise(p.x * scale, p.y * scale, p.z * scale);
-//     return 1.0f - fabsf(n);
-// }
-
-// //------------------------------------------------------
-// // Final height computation
-// //------------------------------------------------------
-// float computeHeight(const Vec3& n, float baseScale, float mountainScale, float ridgeScale) {
-//     // Large-scale continents
-//     float continent = fbm(n, 4, baseScale, 0.5f) * 1.5f;
-
-//     // Mountain ranges
-//     float mountain = powf(fbm(n, 5, mountainScale, 0.45f), 3.0f) * 0.5f;
-
-//     // Ridges
-//     float r = ridge(n, ridgeScale) * 0.3f;
-
-//     float height = continent + mountain + r;
-
-//     float seaLevel = 0.4f;
-//     height -= seaLevel;
-
-//     return std::max(-1.0f, std::min(height, 1.0f));
-// }
-
-// //------------------------------------------------------
-// // PlanetGenerator
-// //------------------------------------------------------
-// class PlanetGenerator {
-// public:
-//     PlanetGenerator(int seed, int size, float baseScale, float mountainScale, float ridgeScale)
-//         : seed(seed), size(size), baseScale(baseScale), mountainScale(mountainScale), ridgeScale(ridgeScale)
-//     {
-//         setNoiseSeed(seed);
-//         heightmap.resize(size * size);
-//     }
-
-//     void generate() {
-//         for (int y = 0; y < size; y++) {
-//             for (int x = 0; x < size; x++) {
-//                 Vec3 n = sampleSphere(x, y, size);
-//                 float h = computeHeight(n, baseScale, mountainScale, ridgeScale);
-//                 heightmap[y * size + x] = h;
-//             }
-//         }
-//     }
-
-//     emscripten::val getHeightmap() {
-//         return emscripten::val(emscripten::typed_memory_view(heightmap.size(), heightmap.data()));
-//     }
-
-// private:
-//     int seed;
-//     int size;
-//     float baseScale;
-//     float mountainScale;
-//     float ridgeScale;
-//     std::vector<float> heightmap;
-// };
-
-// //------------------------------------------------------
-// // Bindings
-// //------------------------------------------------------
-// EMSCRIPTEN_BINDINGS(planet_module) {
-//     emscripten::class_<PlanetGenerator>("PlanetGenerator")
-//         .constructor<int, int, float, float, float>()
-//         .function("generate", &PlanetGenerator::generate)
-//         .function("getHeightmap", &PlanetGenerator::getHeightmap);
-// }
+} // extern "C"

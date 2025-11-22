@@ -1,26 +1,49 @@
+// noise_params.cpp
 #include "util.hpp"
 
-
+// This struct matches the parameters used by planet.cpp
 struct NoiseParams {
     float macroFreq;
+    int   macroOctaves;
+    float macroAmp;
+
     float microFreq;
+    int   microOctaves;
+    float microAmp;
+
     float ridgeFreq;
-    float amplitude;
-    int octaves;
+    int   ridgeOctaves;
+    float ridgeAmp;
+
+    float lacunarity;
+    float gain;
 };
 
+// generateNoiseParams(seed) -> deterministic params for a seed
+inline float r(uint32_t seed, uint32_t salt, float a, float b) {
+    return randomRange(seed, salt, a, b);
+}
 
-NoiseParams generateNoiseParams(int seed) {
+NoiseParams generateNoiseParams(uint32_t seed) {
     NoiseParams p;
+    // macro (continent) scales
+    p.macroFreq = r(seed, 11, 0.03f, 0.18f);       // large-scale continent size
+    p.macroOctaves = (int)r(seed, 12, 2.0f, 5.0f);
+    p.macroAmp = r(seed, 13, 0.6f, 1.6f);
 
-    p.macroFreq = randomRange(seed + 10, 0.1f, 0.3f);
-    p.microFreq = randomRange(seed + 20, 1.0f, 3.0f);
-    p.ridgeFreq = randomRange(seed + 30, 0.8f, 2.2f);
+    // micro (detail)
+    p.microFreq = r(seed, 21, 0.8f, 3.0f);
+    p.microOctaves = (int)r(seed, 22, 2.0f, 6.0f);
+    p.microAmp = r(seed, 23, 0.05f, 0.5f);
 
+    // ridge (mountain)
+    p.ridgeFreq = r(seed, 31, 0.6f, 2.5f);
+    p.ridgeOctaves = (int)r(seed, 32, 1.0f, 4.0f);
+    p.ridgeAmp = r(seed, 33, 0.2f, 1.2f);
 
-    p.amplitude = randomRange(seed + 40, 0.08f, 0.15f);
-    p.octaves = (int)randomRange(seed + 50, 3, 6);
-
+    // general fBm params
+    p.lacunarity = r(seed, 41, 1.8f, 2.2f);
+    p.gain = r(seed, 42, 0.35f, 0.6f);
 
     return p;
 }
