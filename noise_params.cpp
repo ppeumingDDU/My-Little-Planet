@@ -1,5 +1,5 @@
 #include "util.hpp"
-
+#include "noise.cpp"
 
 struct NoiseParams {
     float macroFreq;
