@@ -1,47 +1,93 @@
-// noise_params.cpp
 #include "util.hpp"
 
-// This struct matches the parameters used by planet.cpp
+// -------------------------------------------------------------
+// NoiseParams 구조체 설명
+// -------------------------------------------------------------
+// planet.cpp 에서 사용하는 노이즈 설정값과 동일한 구조.
+// 이 값들은 “행성의 대륙 모양, 산맥, 지형 디테일” 등을
+// 어떤 스타일로 만들지 결정하는 설정값 묶음이다.
+//
+// 여기서 만든 NoiseParams는 seed(정수) 하나만 바뀌어도
+// 완전히 다른 행성이 생성되도록 설계되어 있다.
+// -------------------------------------------------------------
 struct NoiseParams {
-    float macroFreq;
-    int   macroOctaves;
-    float macroAmp;
+    float macroFreq;      // 대륙 크기를 결정하는 노이즈 주파수
+    int   macroOctaves;   // 대륙 노이즈 반복 횟수 (옥타브 수)
+    float macroAmp;       // 대륙 전체 높이(산과 골짜기)의 강도
 
-    float microFreq;
-    int   microOctaves;
-    float microAmp;
+    float microFreq;      // 작은 규모 지형 디테일의 주파수
+    int   microOctaves;   // micro 디테일의 옥타브 수
+    float microAmp;       // micro 디테일 강도
 
-    float ridgeFreq;
-    int   ridgeOctaves;
-    float ridgeAmp;
+    float ridgeFreq;      // 산맥 패턴의 주파수
+    int   ridgeOctaves;   // 산맥 옥타브 수
+    float ridgeAmp;       // 산맥의 강도 (얼마나 날카로운 산이 생기는지)
 
-    float lacunarity;
-    float gain;
+    float lacunarity;     // 옥타브 간 주파수 증가 비율
+    float gain;           // 옥타브 간 강도 감소 비율
 };
 
-// generateNoiseParams(seed) -> deterministic params for a seed
+// -------------------------------------------------------------
+// r(seed, salt, a, b)
+// -------------------------------------------------------------
+// randomRange(seed, salt, a, b) 를 짧게 쓴 함수.
+// - seed : 행성을 구분하는 고유 번호
+// - salt : 각 파라미터를 다르게 만들기 위한 작은 추가 값
+// - a ~ b : 랜덤 값이 들어갈 범위
+//
+// 예: r(12345, 11, 0.03, 0.18)
+//     → 0.03 ~ 0.18 사이의 값 중 하나를 “항상 같은 값”으로 생성.
+//
+// seed만 같으면 결과도 항상 같기 때문에
+// 같은 seed로 같은 행성을 재생성 가능하다.
+// -------------------------------------------------------------
 inline float r(uint32_t seed, uint32_t salt, float a, float b) {
     return randomRange(seed, salt, a, b);
 }
 
+// -------------------------------------------------------------
+// generateNoiseParams(seed)
+// -------------------------------------------------------------
+// 이 함수는 seed 하나를 입력받아
+// “행성 지형 전체를 결정하는 노이즈 설정값 묶음”을 만들어 준다.
+//
+// seed가 같으면 동일한 파라미터가 나오고,
+// seed가 다르면 완전히 다른 대륙/산맥/지형 스타일이 나온다.
+//
+// 즉, 이 함수는 “seed 숫자 → 행성 지형 DNA 생성기” 역할을 한다.
+// -------------------------------------------------------------
 NoiseParams generateNoiseParams(uint32_t seed) {
     NoiseParams p;
-    // macro (continent) scales
-    p.macroFreq = r(seed, 11, 0.03f, 0.18f);       // large-scale continent size
-    p.macroOctaves = (int)r(seed, 12, 2.0f, 5.0f);
-    p.macroAmp = r(seed, 13, 0.6f, 1.6f);
 
-    // micro (detail)
-    p.microFreq = r(seed, 21, 0.8f, 3.0f);
-    p.microOctaves = (int)r(seed, 22, 2.0f, 6.0f);
-    p.microAmp = r(seed, 23, 0.05f, 0.5f);
+    // ---------------------------------------------------------
+    // 1) macro (대륙 모양)
+    // ---------------------------------------------------------
+    // macroFreq  → 대륙 크기
+    // macroOctaves → 대륙의 굴곡 정도
+    // macroAmp  → 대륙의 높낮이 강도
+    p.macroFreq = r(seed, 11, 0.03f, 0.18f);       // 대륙 하나가 얼마나 큰지
+    p.macroOctaves = (int)r(seed, 12, 2.0f, 5.0f); // 반복·굽이치는 정도
+    p.macroAmp = r(seed, 13, 0.6f, 1.6f);          // 대륙 전체 높낮이 강도
 
-    // ridge (mountain)
-    p.ridgeFreq = r(seed, 31, 0.6f, 2.5f);
-    p.ridgeOctaves = (int)r(seed, 32, 1.0f, 4.0f);
-    p.ridgeAmp = r(seed, 33, 0.2f, 1.2f);
+    // ---------------------------------------------------------
+    // 2) micro (작은 지형 디테일)
+    // ---------------------------------------------------------
+    p.microFreq = r(seed, 21, 0.8f, 3.0f);         // 작은 지형 패턴 크기
+    p.microOctaves = (int)r(seed, 22, 2.0f, 6.0f); // 더 미세한 반복 정도
+    p.microAmp = r(seed, 23, 0.05f, 0.5f);         // 작은 지형의 강도
 
-    // general fBm params
+    // ---------------------------------------------------------
+    // 3) ridge (산맥)
+    // ---------------------------------------------------------
+    p.ridgeFreq = r(seed, 31, 0.6f, 2.5f);         // 산맥 패턴 크기
+    p.ridgeOctaves = (int)r(seed, 32, 1.0f, 4.0f); // 산맥 깊이·굽이침
+    p.ridgeAmp = r(seed, 33, 0.2f, 1.2f);          // 산맥의 높이 강도
+
+    // ---------------------------------------------------------
+    // 4) fBm 공통 파라미터
+    // ---------------------------------------------------------
+    // lacunarity → 옥타브마다 주파수가 얼마나 증가하는지
+    // gain       → 옥타브마다 강도가 얼마나 줄어드는지
     p.lacunarity = r(seed, 41, 1.8f, 2.2f);
     p.gain = r(seed, 42, 0.35f, 0.6f);
 

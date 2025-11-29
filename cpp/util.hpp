@@ -1,43 +1,104 @@
-// util.hpp
 #pragma once
 #include <cmath>
 #include <cstdint>
 
-// -------------------------------
-// 3D vector helper
-// -------------------------------
+//
+// ==============================
+// 3D 벡터 도구(수학 계산용 구조체)
+// ==============================
+//
+// Vec3는 3차원 공간에서 점이나 방향을 표현하는 구조체.
+// x, y, z 값 하나씩을 담고 있다.
+// 게임, 그래픽, 물리 엔진에서 기본적으로 쓰이는 가장 단순한 형태.
+//
 struct Vec3 {
     float x, y, z;
+
+    // 기본값(0,0,0) 생성자
     Vec3(): x(0), y(0), z(0) {}
+
+    // (X,Y,Z) 값을 지정해서 만드는 생성자
     Vec3(float X, float Y, float Z): x(X), y(Y), z(Z) {}
 };
 
-// normalize vector (if zero-length returns zero-vector)
+//
+// ==============================
+// 벡터 정규화(normalize)
+// ==============================
+//
+// 벡터의 길이를 1로 만드는 기능.
+// - “방향만 유지하고 크기를 1로 만든다”는 의미
+// - 길이가 0인 벡터(즉, (0,0,0))는 정규화 불가능하므로 그대로 0 벡터 반환
+//
+// 행성 표면의 방향(법선 벡터)을 구할 때 주로 사용된다.
+//
 inline Vec3 normalize(const Vec3& v) {
     float len = std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+
+    // 길이가 너무 짧다면(0에 가까우면) 방향을 계산할 수 없으므로 0벡터 반환
     if (len <= 1e-9f) return Vec3(0.0f, 0.0f, 0.0f);
+
+    // (x/길이, y/길이, z/길이)
     return Vec3(v.x/len, v.y/len, v.z/len);
 }
 
-// linear interpolation
+//
+// ==============================
+// 선형 보간 (lerp: Linear Interpolation)
+// ==============================
+//
+// 두 값 a와 b 사이에서 t(0~1)에 따라 중간 값을 계산.
+// 예: a=10, b=20, t=0.5 → 결과=15 (딱 중간)
+//
+// 그래픽·애니메이션·지형 계산에서 자주 쓰인다.
+//
 inline float lerp(float a, float b, float t) {
     return a + t * (b - a);
 }
 
-// clamp for floats (portable if std::clamp not present)
+//
+// ==============================
+// clampf (클램프)
+// ==============================
+//
+// 값 v가 lo와 hi 사이를 넘지 않도록 막는 함수.
+// - lo 이하이면 lo 반환
+// - hi 이상이면 hi 반환
+// - 그 사이면 그대로 v 반환
+//
+// 어떤 값이 제한된 범위를 넘지 못하게 할 때 사용.
+//
 inline float clampf(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
     return v;
 }
 
-// smoothstep (edge blending)
+//
+// ==============================
+// smoothstep (부드러운 경계 처리)
+// ==============================
+//
+// edge0~edge1 사이에서 x를 부드럽게 0→1로 변화시키는 함수.
+// clamp + 곡선 형태의 보간을 사용하여,
+// 갑작스럽게 바뀌지 않고 자연스럽게 변화하도록 만드는 기능.
+//
+// 예: 해안선·산맥 마스킹 등 “부드러운 지형 변화”에 매우 유용.
+//
 inline float smoothstep(float edge0, float edge1, float x) {
     float t = clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
+    return t * t * (3.0f - 2.0f * t);  // 매끄러운 곡선
 }
 
-// simple 32-bit integer hash (deterministic)
+//
+// ==============================
+// 32비트 정수 해시 함수 (seed → 랜덤값)
+// ==============================
+//
+// 같은 seed가 들어오면 항상 같은 숫자가 나오도록 만들어진 함수.
+// 즉, “재현 가능한 랜덤값” 생성기.
+// 행성 생성에서 seed 값에 의해 행성이 일정하게 결정되도록 만들 때 사용.
+//
 inline uint32_t hash32(uint32_t x) {
     x = (x ^ 61u) ^ (x >> 16u);
     x = x + (x << 3u);
@@ -47,14 +108,30 @@ inline uint32_t hash32(uint32_t x) {
     return x;
 }
 
-// deterministic 0..1 float from seed+salt
+//
+// ==============================
+// 0~1 사이의 부동소수점 난수 만들기 (seed 기반)
+// ==============================
+//
+// hash32 결과의 일부 비트를 이용해 0~1 사이의 랜덤값을 만든다.
+// seed가 같으면 값도 항상 같음 → 같은 행성 생성.
+//
 inline float hash01(uint32_t seed, uint32_t salt = 0) {
     uint32_t v = hash32(seed + salt);
-    // take lower 24 bits -> fraction
+
+    // 아래 24비트를 소수로 변환해 0~1 구간으로 매핑
     return (v & 0xFFFFFFu) / float(0x1000000u);
 }
 
-// map seed->float in [a,b]
+//
+// ==============================
+// randomRange (특정 범위 [a,b] 안에서 랜덤값)
+// ==============================
+//
+// seed + salt 조합으로 "a~b 범위 안에 있는 랜덤값"을 만듦.
+// seed가 고정되면 행성 생성값이 재현됨.
+// 예: 산맥 크기, 대륙 크기 등을 seed에 따라 자동 생성.
+//
 inline float randomRange(uint32_t seed, uint32_t salt, float a, float b) {
     return a + (b - a) * hash01(seed, salt);
 }
