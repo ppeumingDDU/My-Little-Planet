@@ -4,7 +4,7 @@ body {
     padding: 0;
     background-color: #10101c; /* 배경 색상 */
     color: #ffffff; /* 기본 텍스트 색상 */
-    font-family: Pretendard, Mochiy-Pop-One, Parisienne, Press-Start-2P; /* 지정된 폰트들 */
+    font-family: Pretendard, MochiyPopOne, Press-Start-2P; /* 지정된 폰트들 */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -95,7 +95,7 @@ body::before {
 .main-title {
     margin: 0;
     padding: 0;
-    letter-spacing: 2px;
+    letter-spacing: 4px;
     font-size: 4em; /* 전체적인 글자 크기 조정 */
     line-height: 1;
 }
@@ -117,7 +117,6 @@ body::before {
 
 .title-planet {
     font-weight: 800; /* 굵은 서체 */
-    /* 대문자는 HTML 구조에서 이미 적용됨 */
 }
 
 
@@ -125,55 +124,24 @@ body::before {
 /******** generate 버튼 설정 ********/
 
 .generate-button {
-    background-color: rgba(255, 255, 255, 0.1); /* 반투명한 배경 */
+    background-color: rgba(255, 255, 255, 0.2); /* 반투명한 배경 */
     border: 1px solid rgba(255, 255, 255, 0.5); /* 흰색 테두리 */
     color: #ffffff;
     padding: 10px 20px;
-    border-radius: 50px;
+    border-radius: 70px;
     cursor: pointer;
     font-size: 1em;
     font-weight: 600;
-    margin-top: 20px;
+    margin-top: 70px;
+    text-decoration: none;
     transition: background-color 0.3s, border-color 0.3s;
 }
 
 .generate-button:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.097);
     border-color: #ffffff;
 }
 
-/* 하단 특징 섹션 */
-.features-section {
-    display: flex;
-    justify-content: center;
-    gap: 80px; /* 아이템 간격 */
-    margin-top: 25px; /* 지구 섹션 아래에 위치시키기 위해 충분한 마진 */
-    z-index: 30;
-    position: relative;
-}
-
-.feature-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 120px;
-    text-align: center;
-}
-
-.circle {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    background-color: rgba(255, 255, 255, 0.05); /* 투명한 원형 배경 */
-    margin-bottom: 10px;
-    /* 원형 위에 있는 아이콘 Placeholder로 사용 */
-}
-
-.feature-item p {
-    font-size: 0.9em;
-    font-weight: 300;
-}
 
 /* 미디어 쿼리: 작은 화면에서의 조정 */
 @media (max-width: 768px) {
@@ -202,13 +170,7 @@ body::before {
     font-family: 'Pretendard';
     src: url('Pretendard-Black.woff') format('woff'),
         url ('Pretendard-Bold.woff') format('woff'),
-        url ('Pretendard-ExtraBold.woff') format('woff'),
-        url ('Pretendard-ExtraLight.woff') format('woff'),
-        url ('Pretendard-Light.woff') format('woff'),
         url ('Pretendard-Medium.woff') format('woff'),
-        url ('Pretendard-Regular.woff') format('woff'),
-        url ('Pretendard-SemiBold.woff') format('woff'),
-        url ('Pretendard-Thin.woff') format('woff'),
 }
 
 @font-face {
