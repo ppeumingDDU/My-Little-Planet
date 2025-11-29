@@ -143,26 +143,31 @@ extern "C" {
         return height;
     }
 
-    // --------------------------------------------------------------
-    // get_final_position
-    // --------------------------------------------------------------
-    // 행성 표면 위의 최종 위치 계산:
-    // 1) 입력된 (x,y,z) 방향을 단위 벡터로 정리한 후
-    // 2) get_height()로 높이를 구하고
-    // 3) 기본 반지름 + 높이를 곱하여 최종 표면 좌표를 만든다.
-    //
-    // 즉,
-    // “구의 한 점이 지형에 의해 얼마나 밀려나거나 들어갔는가”
-    // 를 계산하여 Three.js에서 행성 표면을 실제로 변형하는 데 사용됨.
-    // --------------------------------------------------------------
-    void get_final_position(float x, float y, float z,
-                            float* outX, float* outY, float* outZ) {
-        Vec3 n = normalize(Vec3(x,y,z));
-        float h = get_height(n.x, n.y, n.z);
-        float r = GLOBAL_RADIUS + h; // 기본 반지름 + 높이 → 실제 좌표
+    /**
+     * @brief 정점 배열(Buffer)을 받아 한 번에 높이를 적용하는 함수 (Batch Processing)
+     * @param buffer : [x, y, z, x, y, z, ...] 형태의 1차원 배열 포인터
+     * @param vertexCount : 정점(점)의 개수
+     */
+    void apply_displacement_batch(float* buffer, int vertexCount) {
+        for (int i = 0; i < vertexCount; ++i) {
+            int idx = i * 3; // x, y, z가 연속되어 있으므로 3칸씩 점프
 
-        *outX = n.x * r;
-        *outY = n.y * r;
-        *outZ = n.z * r;
+            float x = buffer[idx];
+            float y = buffer[idx + 1];
+            float z = buffer[idx + 2];
+
+            // 1. 높이 계산 (기존 로직 재사용)
+            // (주의: 내부적으로 normalize를 하므로 입력값이 찌그러져 있어도 상관없음)
+            Vec3 n = normalize(Vec3(x, y, z));
+            float h = get_height(n.x, n.y, n.z);
+
+            // 2. 최종 위치 계산 (반지름 + 높이)
+            float r = GLOBAL_RADIUS + h;
+
+            // 3. 메모리에 직접 덮어쓰기 (JS 쪽 배열이 바뀜)
+            buffer[idx]     = n.x * r;
+            buffer[idx + 1] = n.y * r;
+            buffer[idx + 2] = n.z * r;
+        }
     }
 } // extern "C"
