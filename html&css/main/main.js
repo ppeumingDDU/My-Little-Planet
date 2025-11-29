@@ -1,4 +1,4 @@
-import createModule from './web/planet.js';
+import createModule from '../../web/planet.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
