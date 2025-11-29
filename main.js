@@ -1,7 +1,6 @@
-import createModule from '/web/planet.js';
 // Latency 측정 코드
-import { PlanetGeneratorJS } from '/js_planet.js'; // Pure JS 모듈 import
-let jsGenerator = new PlanetGeneratorJS(); // JS 인스턴스 생성
+// import { PlanetGeneratorJS } from './js_planet.js'; // Pure JS 모듈 import
+// let jsGenerator = new PlanetGeneratorJS(); // JS 인스턴스 생성
 
 /**
  * @file main.js
@@ -9,7 +8,7 @@ let jsGenerator = new PlanetGeneratorJS(); // JS 인스턴스 생성
  * 사용자의 입력을 받아 C++ 노이즈 알고리즘을 실행하고, 그 결과를 3D 구체(Sphere)의 정점에 적용합니다.
  */
 
-// import createModule from './web/planet.js';
+import createModule from './web/planet.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -278,83 +277,83 @@ init();
 
 
 // Latency 측정 코드
-/**
- * @function measureLatency
- * @description C++(WASM)과 Pure JS의 지형 생성 시간을 비교 측정합니다.
- */
-function measureLatency() {
-    if (!wasmModule || !planetMesh) return;
-
-    const seed = parseInt(ui.seed.value);
-    const scale = parseFloat(ui.scale.value) / 100.0;
-    const radius = parseFloat(ui.radius.value);
-
-    // Geometry 준비 (원본 백업)
-    const geometry = planetMesh.geometry.clone();
-    const posAttribute = geometry.getAttribute('position');
-    const vertexCount = posAttribute.count;
-
-    console.log(`--- Latency Comparison (Vertices: ${vertexCount}) ---`);
-
-    // ============================================
-    // 1. C++ (WASM) 측정
-    // ============================================
-    const startWasm = performance.now();
-
-    // 1-1. 초기화
-    wasmModule._init_planet(seed, scale, radius);
-
-    // 1-2. 루프 & 호출
-    for (let i = 0; i < vertexCount; i++) {
-        const x = posAttribute.getX(i);
-        const y = posAttribute.getY(i);
-        const z = posAttribute.getZ(i);
-
-        // C++ 호출
-        const h = wasmModule._get_height(x, y, z);
-
-        // (참고: 실제 적용 로직은 측정에서 제외하거나 포함해도 됨. 여기선 연산값 획득까지 측정)
-    }
-
-    const endWasm = performance.now();
-    const timeWasm = endWasm - startWasm;
-    console.log(`C++ (WASM) Total Time: ${timeWasm.toFixed(4)} ms`);
-
-
-    // ============================================
-    // 2. Pure JavaScript 측정
-    // ============================================
-    const startJS = performance.now();
-
-    // 2-1. 초기화
-    jsGenerator.init(seed);
-
-    // 2-2. 루프 & 호출
-    for (let i = 0; i < vertexCount; i++) {
-        const x = posAttribute.getX(i);
-        const y = posAttribute.getY(i);
-        const z = posAttribute.getZ(i);
-
-        // JS 호출
-        const h = jsGenerator.getHeight(x, y, z, scale, radius);
-    }
-
-    const endJS = performance.now();
-    const timeJS = endJS - startJS;
-    console.log(`Pure JS Total Time: ${timeJS.toFixed(4)} ms`);
-
-    // ============================================
-    // 3. 결과 출력 및 비교
-    // ============================================
-    const ratio = timeJS / timeWasm;
-    console.log(`Result: WASM is ${ratio.toFixed(2)}x faster than JS`);
-
-    alert(`[Latency Result]\nVertices: ${vertexCount}\nWASM: ${timeWasm.toFixed(2)}ms\nJS: ${timeJS.toFixed(2)}ms\n(WASM is ${ratio.toFixed(2)}x faster)`);
-}
-
-// 기존 updatePlanet 대신 측정 함수를 버튼에 연결하거나,
-// updatePlanet 함수 내부 맨 끝에 measureLatency()를 호출하도록 수정하세요.
-ui.btn.addEventListener("click", () => {
-    updatePlanet();    // 시각적 업데이트
-    setTimeout(measureLatency, 100); // UI 렌더링 후 측정 실행
-});
+// /**
+//  * @function measureLatency
+//  * @description C++(WASM)과 Pure JS의 지형 생성 시간을 비교 측정합니다.
+//  */
+// function measureLatency() {
+//     if (!wasmModule || !planetMesh) return;
+//
+//     const seed = parseInt(ui.seed.value);
+//     const scale = parseFloat(ui.scale.value) / 100.0;
+//     const radius = parseFloat(ui.radius.value);
+//
+//     // Geometry 준비 (원본 백업)
+//     const geometry = planetMesh.geometry.clone();
+//     const posAttribute = geometry.getAttribute('position');
+//     const vertexCount = posAttribute.count;
+//
+//     console.log(`--- Latency Comparison (Vertices: ${vertexCount}) ---`);
+//
+//     // ============================================
+//     // 1. C++ (WASM) 측정
+//     // ============================================
+//     const startWasm = performance.now();
+//
+//     // 1-1. 초기화
+//     wasmModule._init_planet(seed, scale, radius);
+//
+//     // 1-2. 루프 & 호출
+//     for (let i = 0; i < vertexCount; i++) {
+//         const x = posAttribute.getX(i);
+//         const y = posAttribute.getY(i);
+//         const z = posAttribute.getZ(i);
+//
+//         // C++ 호출
+//         const h = wasmModule._get_height(x, y, z);
+//
+//         // (참고: 실제 적용 로직은 측정에서 제외하거나 포함해도 됨. 여기선 연산값 획득까지 측정)
+//     }
+//
+//     const endWasm = performance.now();
+//     const timeWasm = endWasm - startWasm;
+//     console.log(`C++ (WASM) Total Time: ${timeWasm.toFixed(4)} ms`);
+//
+//
+//     // ============================================
+//     // 2. Pure JavaScript 측정
+//     // ============================================
+//     const startJS = performance.now();
+//
+//     // 2-1. 초기화
+//     jsGenerator.init(seed);
+//
+//     // 2-2. 루프 & 호출
+//     for (let i = 0; i < vertexCount; i++) {
+//         const x = posAttribute.getX(i);
+//         const y = posAttribute.getY(i);
+//         const z = posAttribute.getZ(i);
+//
+//         // JS 호출
+//         const h = jsGenerator.getHeight(x, y, z, scale, radius);
+//     }
+//
+//     const endJS = performance.now();
+//     const timeJS = endJS - startJS;
+//     console.log(`Pure JS Total Time: ${timeJS.toFixed(4)} ms`);
+//
+//     // ============================================
+//     // 3. 결과 출력 및 비교
+//     // ============================================
+//     const ratio = timeJS / timeWasm;
+//     console.log(`Result: WASM is ${ratio.toFixed(2)}x faster than JS`);
+//
+//     alert(`[Latency Result]\nVertices: ${vertexCount}\nWASM: ${timeWasm.toFixed(2)}ms\nJS: ${timeJS.toFixed(2)}ms\n(WASM is ${ratio.toFixed(2)}x faster)`);
+// }
+//
+// // 기존 updatePlanet 대신 측정 함수를 버튼에 연결하거나,
+// // updatePlanet 함수 내부 맨 끝에 measureLatency()를 호출하도록 수정하세요.
+// ui.btn.addEventListener("click", () => {
+//     updatePlanet();    // 시각적 업데이트
+//     setTimeout(measureLatency, 100); // UI 렌더링 후 측정 실행
+// });
