@@ -1,28 +1,59 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <title>Three.js Planet Viewer (for WASM)</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM 3D Planet Generator</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
+        body { margin: 0; background-color: #000; overflow: hidden; color: white; font-family: sans-serif; }
         canvas { display: block; }
-        /* 간단한 UI: C++ 호출 버튼 */
-        #generateButton {
+        #ui-container {
             position: absolute;
             top: 10px;
             left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
             z-index: 10;
-            padding: 10px 15px;
-            font-size: 16px;
-            cursor: pointer;
         }
+        .control-group { margin-bottom: 10px; }
+        label { display: inline-block; width: 100px; }
+        input[type="range"] { vertical-align: middle; }
+        input[type="number"] { width: 60px; }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #0b7dda; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
     </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<div id="ui-container">
+    <h3>Planet Settings</h3>
+    <div class="control-group">
+        <label>Seed:</label>
+        <input type="number" id="seed" value="12345">
+    </div>
+    <div class="control-group">
+        <label>Scale:</label>
+        <input type="range" id="scale" min="10" max="200" value="50">
+    </div>
+    <div class="control-group">
+        <label>Radius:</label>
+        <input type="range" id="radius" min="1.0" max="3.0" step="0.1" value="1.5">
+    </div>
+    <button id="generate-btn" disabled>Loading WASM...</button>
+</div>
 
-<button id="generateButton">Generate Planet (Simulate WASM Call)</button>
+<canvas id="c"></canvas>
 
 <script type="importmap">
     {
@@ -33,231 +64,6 @@
     }
 </script>
 
-<script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-    // --- 전역 변수 선언 ---
-    let scene, camera, renderer, controls;
-    let planet, planetMaterial;
-    let directionalLight; // 태양 조명
-
-    // C++에서 반환할 텍스처의 해상도 (C++과 동일하게 맞춰야 함)
-    const TEXTURE_WIDTH = 1024;
-    const TEXTURE_HEIGHT = 512;
-
-    // --- 초기화 함수 ---
-    function init() {
-        // 1. 씬 (Scene)
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a1a); // 우주 배경색
-
-        // 2. 카메라 (Camera)
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 5; // 카메라를 5만큼 뒤로 이동
-
-        // 3. 렌더러 (Renderer)
-        renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#c'), antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-
-        // 4. 조명 (Lights)
-        // 4-1. 주변광 (전체적으로 은은하게 밝힘)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-        scene.add(ambientLight);
-        // 4-2. 태양광 (C++이 위치를 결정할 메인 조명)
-        directionalLight = new THREE.DirectionalLight(0xffffff, 2.0); // 밝기 2.0
-        scene.add(directionalLight);
-
-        // 5. 마우스 컨트롤 (OrbitControls)
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-
-        // 6. 행성 (Planet)
-        // 6-1. 지오메트리 (Geometry): 처음엔 반지름 1짜리 기본 구체로 생성
-        // 세그먼트를 (128, 64)로 높게 설정해야 displacementMap이 잘 표현됨
-        const geometry = new THREE.SphereGeometry(1, 128, 64);
-
-        // 6-2. 머티리얼 (Material): 행성의 재질
-        planetMaterial = new THREE.MeshStandardMaterial({
-            roughness: 0.8,
-            metalness: 0.1,
-            map: null,                // (C++이 채워줄) 색상 텍스처
-            displacementMap: null,    // (C++이 채워줄) 높낮이 텍스처
-            displacementScale: 0.1    // 높낮이 강도 (이것도 C++이 값을 줄 수 있음)
-        });
-
-        // 6-3. 메시 (Mesh): 지오메트리 + 머티리얼
-        planet = new THREE.Mesh(geometry, planetMaterial);
-        scene.add(planet);
-
-        // 7. 이벤트 리스너 설정
-        // 'Generate' 버튼 클릭 시 C++ 데이터를 받아와 적용하는 함수 호출
-        document.getElementById('generateButton').addEventListener('click', generateAndApplyPlanetData);
-        window.addEventListener('resize', onWindowResize);
-
-        // 8. 최초의 행성 생성
-        generateAndApplyPlanetData();
-
-        // 9. 애니메이션 루프 시작
-        animate();
-    }
-
-    /**
-     * [핵심] C++(WASM) 데이터를 받아와 Three.js 씬에 적용하는 함수
-     */
-    function generateAndApplyPlanetData() {
-
-        // --- 1. 사용자 입력 값 준비 (가정) ---
-        // 실제로는 UI에서 이 값들을 읽어와야 합니다.
-        const userInput = {
-            seed: "random_seed_" + Math.random(),
-            scale: 50 + Math.random() * 50,
-            planet_radius: 1.5 + Math.random() * 0.5 // 반지름 1.5 ~ 2.0
-        };
-
-        // --- 2. C++(WASM) 함수 호출 (가상) ---
-        //
-        // ★★★★★
-        // 여기가 실제 WASM을 호출하는 부분입니다.
-        // 지금은 mockFetchDataFromWASM() 라는 가상 함수로 대체합니다.
-        //
-        // (예시) const wasmResult = wasmModule.generatePlanet(userInput.seed, userInput.scale, userInput.planet_radius);
-        //
-        const wasmResult = mockFetchDataFromWASM(userInput);
-
-
-        // --- 3. WASM 결과값을 Three.js에 적용 ---
-
-        // 3-1. 행성 크기(Radius) 적용
-        // 기존 지오메트리를 버리고 C++ 계산에 사용된 반지름으로 새로 생성
-        // (참고: 스케일(planet.scale.set(r,r,r)) 조절보다 이 방식이 displacement 강도 계산에 더 정확함)
-        planet.geometry.dispose(); // 이전 지오메트리 메모리 해제
-        planet.geometry = new THREE.SphereGeometry(
-            wasmResult.radius, // C++이 사용한 반지름
-            128, 64            // 세그먼트는 높게 유지
-        );
-
-        // 3-2. 색상 텍스처(ColorData) 적용
-        // C++이 반환한 Uint8Array로 DataTexture 생성
-        if (planetMaterial.map) planetMaterial.map.dispose(); // 이전 텍스처 해제
-
-        const colorTexture = new THREE.DataTexture(
-            wasmResult.colorData, // C++이 반환한 픽셀 배열
-            TEXTURE_WIDTH,
-            TEXTURE_HEIGHT,
-            THREE.RGBAFormat  // C++이 RGBA 순서로 데이터를 줬다고 가정
-        );
-        colorTexture.needsUpdate = true; // 텍스처 업데이트 알림
-        planetMaterial.map = colorTexture; // 머티리얼에 적용
-
-        // 3-3. 높낮이 텍스처(HeightData) 적용
-        if (planetMaterial.displacementMap) planetMaterial.displacementMap.dispose();
-
-        const heightTexture = new THREE.DataTexture(
-            wasmResult.heightData, // C++이 반환한 흑백 픽셀 배열
-            TEXTURE_WIDTH,
-            TEXTURE_HEIGHT,
-            THREE.RGBAFormat // 흑백이어도 R=G=B=Height 값, A=255 이므로 RGBA
-        );
-        heightTexture.needsUpdate = true;
-        planetMaterial.displacementMap = heightTexture;
-
-        // 3-4. 높낮이 강도(DisplacementScale) 적용 (C++이 값을 정해줄 경우)
-        planetMaterial.displacementScale = wasmResult.generatedDisplacementScale;
-
-        // 3-5. 태양 위치(SunPosition) 적용
-        directionalLight.position.set(
-            wasmResult.sunPosition.x,
-            wasmResult.sunPosition.y,
-            wasmResult.sunPosition.z
-        ).normalize(); // 방향이 중요하므로 normalize
-
-        // 3-6. 머티리얼 업데이트 최종 알림
-        planetMaterial.needsUpdate = true;
-
-        console.log("WASM Data Applied. Planet Radius:", wasmResult.radius);
-    }
-
-    /**
-     * [시뮬레이션 함수] C++(WASM) 호출을 흉내 냅니다.
-     * 이 함수는 C++이 반환할 데이터 형식과 똑같은 객체를 반환합니다.
-     * (나중에 이 함수를 실제 WASM 호출로 바꾸세요)
-     */
-    function mockFetchDataFromWASM(userInput) {
-        console.log("Simulating WASM call with seed:", userInput.seed);
-
-        const arraySize = TEXTURE_WIDTH * TEXTURE_HEIGHT * 4; // RGBA
-        const colorData = new Uint8Array(arraySize);
-        const heightData = new Uint8Array(arraySize);
-
-        // 가짜 텍스처 데이터 생성 (간단한 패턴)
-        for (let i = 0; i < TEXTURE_HEIGHT; i++) {
-            for (let j = 0; j < TEXTURE_WIDTH; j++) {
-                const index = (i * TEXTURE_WIDTH + j) * 4;
-
-                // 1. Color Data (가짜 색상: 파란/초록 줄무늬)
-                if (i < TEXTURE_HEIGHT / 2) {
-                    colorData[index] = 0;   // R
-                    colorData[index + 1] = 150; // G
-                    colorData[index + 2] = 50;  // B
-                } else {
-                    colorData[index] = 0;   // R
-                    colorData[index + 1] = 50;  // G
-                    colorData[index + 2] = 150; // B
-                }
-                colorData[index + 3] = 255; // A
-
-                // 2. Height Data (가짜 높낮이: 체커보드)
-                const isEven = (Math.floor(i / 32) + Math.floor(j / 32)) % 2 === 0;
-                const heightVal = isEven ? 255 : 100; // 흰색(높음) 또는 회색(낮음)
-                heightData[index] = heightVal;     // R
-                heightData[index + 1] = heightVal; // G
-                heightData[index + 2] = heightVal; // B
-                heightData[index + 3] = 255;   // A
-            }
-        }
-
-        // 가짜 랜덤 태양 위치
-        const sunPos = {
-            x: Math.random() - 0.5,
-            y: Math.random() - 0.5,
-            z: Math.random() - 0.5
-        };
-
-        // C++이 반환할 최종 객체
-        return {
-            colorData: colorData,
-            heightData: heightData,
-            sunPosition: sunPos,
-            radius: userInput.planet_radius, // C++이 사용자 입력을 그대로 사용
-            generatedDisplacementScale: 0.25 // C++이 계산한 랜덤 강도 (가정)
-        };
-    }
-
-
-    // --- 보조 함수들 ---
-
-    // 렌더링 루프
-    function animate() {
-        requestAnimationFrame(animate);
-        if (planet) {
-            planet.rotation.y += 0.001; // 행성 자전
-        }
-        controls.update(); // 마우스 컨트롤 업데이트
-        renderer.render(scene, camera);
-    }
-
-    // 창 크기 조절
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    // --- 스크립트 시작 ---
-    init();
-
-</script>
+<script type="module" src="./main.js"></script>
 </body>
 </html>
