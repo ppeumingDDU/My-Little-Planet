@@ -65,6 +65,6 @@ AI를 적극적으로 사용해도 된다는 조건이 있었으나, 애초에 A
 
 | 주요 기능 | C++ (WASM) | JavaScript | 비고 |
 |----------|------------|------------|------|
-| Terrain Generation & Displacement<br>(지형 높이 계산 및 정점 변위 적용) | 7.00ms | 18.90ms | C++이 약 2.7배 빠름 |
+| Terrain Generation & Displacement<br>(지형 높이 계산 및 정점 변위 적용) | 10.18ms | 17.70ms | C++이 약 2.7배 빠름 |
 
 ---
