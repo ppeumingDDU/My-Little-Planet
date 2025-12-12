@@ -29,7 +29,6 @@ const CONFIG = {
     planet: {
         radius: 1,         // 기본 반지름
         segments: 200,     // 구체의 분할 수 (높을수록 지형이 더 정교해지지만 성능 부하 증가)
-        // color: 0x88ccff,   // [삭제됨] 단일 색상 대신 아래 두 가지 색상을 사용합니다.
         oceanColor: 0x1a5fb4, // 깊은 바다색
         landColor: 0x48a348,  // 육지(숲)색
         roughness: 0.8,    // 재질의 거칠기 (빛 반사 정도)
@@ -44,7 +43,7 @@ const CONFIG = {
     }
 };
 
-// [추가] 색상 계산을 위해 THREE.Color 객체로 미리 변환 (RGB 값을 쉽게 얻기 위함)
+// 색상 계산을 위해 THREE.Color 객체로 미리 변환 (RGB 값을 쉽게 얻기 위함)
 const oceanColorObj = new THREE.Color(CONFIG.planet.oceanColor);
 const landColorObj = new THREE.Color(CONFIG.planet.landColor);
 
@@ -173,7 +172,7 @@ function createPlanetMesh() {
         CONFIG.planet.segments
     );
 
-    // [추가] 1. 버텍스 컬러 버퍼 생성
+    // 1. 버텍스 컬러 버퍼 생성
     // 점(Vertex)마다 색상 정보를 저장할 공간을 만듭니다. (점 개수 * 3 (R,G,B))
     const count = geometry.attributes.position.count;
     const colors = new Float32Array(count * 3);
@@ -191,7 +190,7 @@ function createPlanetMesh() {
     const material = new THREE.MeshStandardMaterial({   // 물리 기반 렌더링: 빛을 받았을 때 현실적으로 반응
         // color: CONFIG.planet.color, // [삭제됨] 단일 색상 대신 vertexColors 사용
         color: 0xffffff, // 기본 바탕색을 흰색으로 해야 버텍스 컬러가 그대로 보임
-        vertexColors: true, // [추가] "이 재질은 각 점이 가진 고유의 색을 사용합니다"라고 설정
+        vertexColors: true, // "이 재질은 각 점이 가진 고유의 색을 사용합니다"라고 설정
         flatShading: true, // 각진 폴리곤 느낌 (Low Poly 스타일)
         roughness: CONFIG.planet.roughness  // 거칠기(1에 가까울수록 매트하고 거친 느낌)
     });
