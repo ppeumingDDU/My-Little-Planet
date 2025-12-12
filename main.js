@@ -91,7 +91,12 @@ async function init() {
         updatePlanet();
 
         // 이벤트 리스너 등록
-        ui.btn.addEventListener("click", updatePlanet);
+        // 클릭 시 updatePlanet 후 measureLatency 호출
+        ui.btn.addEventListener("click", () => {
+            updatePlanet();
+            // [Latency 비교] 화면 갱신이 완료된 후 측정을 시작하기 위해 약간의 지연을 줍니다.
+            // setTimeout(measureLatency, 50);
+        });
         window.addEventListener("resize", onWindowResize);
 
         // 렌더링 루프 시작
@@ -266,17 +271,20 @@ function applyDisplacement(geometry, radius) {
     // 기준 높이: 반지름보다 높으면 육지로 판정
     const seaLevel = radius * 1.1;
 
+    // 대신 "비교할 기준값(seaLevel)을 미리 제곱"해두고, 거리의 제곱값(x*x + y*y + z*z)과 비교합니다.
+    const seaLevelSq = seaLevel * seaLevel;
+
     for (let i = 0; i < vertexCount; i++) {
         // 현재 점의 좌표
         const x = jsArray[i * 3];
         const y = jsArray[i * 3 + 1];
         const z = jsArray[i * 3 + 2];
 
-        // 원점에서의 거리(높이) 계산: sqrt(x^2 + y^2 + z^2)
-        const magnitude = Math.sqrt(x*x + y*y + z*z);
+        // 원점에서의 거리 제곱 계산 (sqrt 제거)
+        const magnitudeSq = x*x + y*y + z*z;
 
-        // 높이에 따라 색상 결정
-        if (magnitude > seaLevel) {
+        // 높이에 따라 색상 결정 (제곱된 값끼리 비교)
+        if (magnitudeSq > seaLevelSq) {
             // 육지
             colors[i * 3] = landColorObj.r;
             colors[i * 3 + 1] = landColorObj.g;
@@ -334,41 +342,51 @@ init();
 // Latency 측정 코드
 // /**
 //  * @function measureLatency
-//  * @description C++(WASM)과 Pure JS의 지형 생성 시간을 비교 측정합니다.
+//  * @description C++(WASM)과 Pure JS의 지형 생성 시간을 공정하게 비교합니다.
+//  * 두 방식 모두 점 하나하나가 아니라, 전체 배열을 처리하는 시간(Batch Process)을 측정합니다.
 //  */
 // function measureLatency() {
-//     if (!wasmModule || !planetMesh) return;
+//     if (!wasmModule || !planetMesh || !jsGenerator) return;
 //
 //     const seed = parseInt(ui.seed.value);
 //     const scale = parseFloat(ui.scale.value) / 100.0;
 //     const radius = parseFloat(ui.radius.value);
 //
-//     // Geometry 준비 (원본 백업)
-//     const geometry = planetMesh.geometry.clone();
-//     const posAttribute = geometry.getAttribute('position');
-//     const vertexCount = posAttribute.count;
+//     // 공정한 비교를 위해 테스트용 지오메트리를 복제하여 사용 (원본 훼손 방지)
+//     // 1. WASM 테스트용
+//     const geometryWasm = planetMesh.geometry.clone();
+//     const arrayWasm = geometryWasm.getAttribute('position').array; // Float32Array
+//     const vertexCount = arrayWasm.length / 3;
+//
+//     // 2. JS 테스트용
+//     const geometryJS = planetMesh.geometry.clone();
+//     const arrayJS = geometryJS.getAttribute('position').array; // Float32Array
 //
 //     console.log(`--- Latency Comparison (Vertices: ${vertexCount}) ---`);
 //
 //     // ============================================
 //     // 1. C++ (WASM) 측정
+//     // : 메모리 할당 -> 데이터 복사 -> 배치 계산 -> 데이터 회수 -> 해제
 //     // ============================================
 //     const startWasm = performance.now();
 //
 //     // 1-1. 초기화
 //     wasmModule._init_planet(seed, scale, radius);
 //
-//     // 1-2. 루프 & 호출
-//     for (let i = 0; i < vertexCount; i++) {
-//         const x = posAttribute.getX(i);
-//         const y = posAttribute.getY(i);
-//         const z = posAttribute.getZ(i);
+//     // 1-2. 메모리 준비 및 복사 (Data Marshalling Cost 포함)
+//     const byteSize = arrayWasm.length * arrayWasm.BYTES_PER_ELEMENT;
+//     const ptr = wasmModule._malloc(byteSize);
+//     wasmModule.HEAPF32.set(arrayWasm, ptr >> 2);
 //
-//         // C++ 호출
-//         const h = wasmModule._get_height(x, y, z);
+//     // 1-3. ★ C++ 배치 함수 실행 (핵심 연산)
+//     wasmModule._apply_displacement_batch(ptr, vertexCount);
 //
-//         // (참고: 실제 적용 로직은 측정에서 제외하거나 포함해도 됨. 여기선 연산값 획득까지 측정)
-//     }
+//     // 1-4. 결과 회수
+//     const resultView = wasmModule.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + arrayWasm.length);
+//     arrayWasm.set(resultView);
+//
+//     // 1-5. 메모리 해제
+//     wasmModule._free(ptr);
 //
 //     const endWasm = performance.now();
 //     const timeWasm = endWasm - startWasm;
@@ -377,20 +395,32 @@ init();
 //
 //     // ============================================
 //     // 2. Pure JavaScript 측정
+//     // : Float32Array 직접 접근 (Direct Access Optimization)
 //     // ============================================
 //     const startJS = performance.now();
 //
 //     // 2-1. 초기화
 //     jsGenerator.init(seed);
 //
-//     // 2-2. 루프 & 호출
+//     // 2-2. ★ JS 루프 실행 (WASM 배치 함수가 하는 일을 JS로 동일하게 수행)
+//     // Three.js의 getX, setX 같은 함수는 오버헤드가 크므로, 배열 인덱스로 직접 접근합니다.
 //     for (let i = 0; i < vertexCount; i++) {
-//         const x = posAttribute.getX(i);
-//         const y = posAttribute.getY(i);
-//         const z = posAttribute.getZ(i);
+//         const index = i * 3;
 //
-//         // JS 호출
+//         // 데이터 읽기
+//         const x = arrayJS[index];
+//         const y = arrayJS[index + 1];
+//         const z = arrayJS[index + 2];
+//
+//         // JS 호출 (높이 값 계산)
 //         const h = jsGenerator.getHeight(x, y, z, scale, radius);
+//
+//         // WASM과 작업량을 맞추기 위해 위치 업데이트 수행 (Write Back)
+//         // 보통 지형 생성 공식: NewPosition = OriginalPosition * (Height / Radius)
+//         const factor = h / radius;
+//         arrayJS[index] *= factor;     // X 업데이트
+//         arrayJS[index + 1] *= factor; // Y 업데이트
+//         arrayJS[index + 2] *= factor; // Z 업데이트
 //     }
 //
 //     const endJS = performance.now();
@@ -403,12 +433,6 @@ init();
 //     const ratio = timeJS / timeWasm;
 //     console.log(`Result: WASM is ${ratio.toFixed(2)}x faster than JS`);
 //
-//     alert(`[Latency Result]\nVertices: ${vertexCount}\nWASM: ${timeWasm.toFixed(2)}ms\nJS: ${timeJS.toFixed(2)}ms\n(WASM is ${ratio.toFixed(2)}x faster)`);
+//     const resultText = `[Latency Result]\nVertices: ${vertexCount}\n🚀 WASM: ${timeWasm.toFixed(2)}ms\n🐢 JS: ${timeJS.toFixed(2)}ms\n\n(WASM is ${ratio.toFixed(2)}x faster)`;
+//     alert(resultText);
 // }
-//
-// // 기존 updatePlanet 대신 측정 함수를 버튼에 연결하거나,
-// // updatePlanet 함수 내부 맨 끝에 measureLatency()를 호출하도록 수정하세요.
-// ui.btn.addEventListener("click", () => {
-//     updatePlanet();    // 시각적 업데이트
-//     setTimeout(measureLatency, 100); // UI 렌더링 후 측정 실행
-// });
