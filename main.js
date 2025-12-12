@@ -196,7 +196,7 @@ function createPlanetMesh() {
         // color: CONFIG.planet.color, // [삭제됨] 단일 색상 대신 vertexColors 사용
         color: 0xffffff, // 기본 바탕색을 흰색으로 해야 버텍스 컬러가 그대로 보임
         vertexColors: true, // "이 재질은 각 점이 가진 고유의 색을 사용합니다"라고 설정
-        flatShading: true, // 각진 폴리곤 느낌 (Low Poly 스타일)
+        flatShading: false, // 매끄러운 느낌 (점과 점 사이를 매끈하게 이어줌)
         roughness: CONFIG.planet.roughness  // 거칠기(1에 가까울수록 매트하고 거친 느낌)
     });
 
@@ -260,7 +260,7 @@ function applyDisplacement(geometry, radius) {
     const calculatedArray = wasmModule.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + jsArray.length);
     jsArray.set(calculatedArray);   // jsArray로 복사
 
-    // 7. 메모리 해제 (free) - 필수! 안 하면 메모리 누수 발생
+    // 7. 메모리 해제 (안 하면 메모리 누수 발생)
     wasmModule._free(ptr);
 
     // 7-1. 높이에 따른 색상 적용 (바다 vs 육지)
